@@ -31,7 +31,8 @@
       addPost(event) {
         if (event) event.preventDefault();
 
-        socket.emit('add_post', this.post); // server logic not implemented
+        // server will brodcast this message to all user friends
+        socket.emit('add_post', this.post); 
 
         axios.post(uri+'/add', this.post).then((response) => {
           this.clearPost();

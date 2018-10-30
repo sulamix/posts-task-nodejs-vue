@@ -51,18 +51,42 @@ app.use('/api/post/', require('./app/PostRoutes'))
 app.use('/api/user/', require('./app/UserRoutes'))
 app.use('/', require('./app/AuthRoutes'))
 
+var connectedUserData = {}
 io.use(sharedsession(session));
-//io.of('/add_post').use(sharedsession(session));
+io.on('connection', socket=>{
+  var userId = socket.handshake.session.userId;
+  connectedUserData[userId] = {socketId: socket.id} 
 
-io.on('connection', function(socket){
-  var userId = socket.handshake.session.userId
+  //get user friends ids and add it to the connectedUserData 
+  db.User.findByPk(userId).then(user => { 
+    connectedUserData[userId].userName = user.name
+    console.log('io connect user ' + user.name + ' id ' + userId)
+    user.getFriends({ raw: true, attributes: ['id'] }).then(friends=>{
+      connectedUserData[userId].friendsIds = friends.map(f => f.id)
+    })
+  })
+  
+  socket.on('add_post', post => {
+    var user_data = connectedUserData[userId]
+    console.log('io get message from ' + user_data.userName + ' id ' + userId)
+    if (!user_data) return
+    post.createdAt = new Date()
+    post.User = {name: user_data.userName}
 
-  socket.on('add_post', function(msg){
-    console.log('post message: ' + msg.text + ' from userId ' + userId);
+    // emit the post message to all user friends
+    user_data.friendsIds.forEach(friend_id => {
+      var user_data = connectedUserData[userId]
+      var friend_data = connectedUserData[friend_id]
+      if (friend_data) {
+        // user friend connected and can get the post message
+        console.log('io emit message to ' + friend_data.userName + ' id ' + friend_id)
+        io.to(friend_data.socketId).emit('add_feed', post) 
+      }
+    })
   });
   
-  socket.on('disconnect', function(){
-    console.log(' user disconnected')
+  socket.on('disconnect', function() {
+    delete connectedUserData[userId];
   });
 });
 

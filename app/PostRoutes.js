@@ -6,18 +6,9 @@ var models = require('../models')
 
 // get all post api
 postRoutes.route('/all').get(function (req, res, next) {
-  //models.User.findOne({ include: [{ all: true }]});
   models.sequelize.query('SELECT friendId FROM userfriend WHERE userId = ?', { raw: true ,replacements: [req.session.userId]})
     .spread((results, metadata) => {
-      var friendsIdsArr = [];
-      for (let idObj of results) {
-        friendsIdsArr.push(idObj.friendId)
-      }
-      // Post.findAll({
-      //   where: {
-      //     [Op.or]: [{authorId: 12}, {authorId: 13}]
-      //   }
-      // });
+      var friendsIdsArr = results.map(r=>r.friendId);
       models.Post.findAll({
           where: { userId: friendsIdsArr },
           include: [{ model: models.User, attributes: ['name'] }],

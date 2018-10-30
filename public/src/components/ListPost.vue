@@ -63,6 +63,11 @@
                 bus.$on('refreshPost', ($event) => {
                     this.fetchPosts();
                 })
+
+                // update the user feeds with a new friend post
+                socket.on('add_feed', post => {
+                    this.posts.unshift(post)
+                });
             },
 
             formatDate(date) {

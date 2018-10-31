@@ -4,39 +4,17 @@
 <div class="agile">
     <div class="signin-form profile">
         <h3>Manage Friends</h3>
-        <div class="col-md-12" v-show="friend_to_approve.length>0">
-            <div class="row mrb-10" v-for="user in friend_to_approve">
-                <div class="user_container">
-                    <span class="user_name"> {{user.name}} </span>
-                    <button class="input-group-addon addon-left manage-btn" title="Accept"
-                        v-on:click="acceptFriendRequest($event, user)">Accept Request</button>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-12" v-show="friend_requests.length>0">
-            <div class="row mrb-10" v-for="user in friend_requests">
-                <hr>
-                <div class="user_container">
-                    <span class="user_name"> {{user.name}} </span>
-                    <span class="f-right"> Request Sent </span>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-12" v-show="friends.length>0">
-            <div class="row mrb-10" v-for="user in friends">
-                <hr>
-                <div class="user_container">
-                    <span class="user_name"> {{user.name}} </span>
-                    <span class="f-right"> A Friend </span>
-                </div>
-            </div>
-        </div>
         <div class="col-md-12" v-show="users.length>0">
             <div class="row mrb-10" v-for="user in users" v-show="!user.hide">
                 <hr>
                 <div class="user_container">
-                    <span class="user_name"> {{user.name}} </span>
-                    <button class="input-group-addon addon-left manage-btn" title="Add"
+                    <span class="user_name"> {{user.name}}</span>
+                    
+                    <span class="f-right" v-show="user.status=='friend'"> A Friend </span>
+                    <span class="f-right" v-show="user.status=='friend_request'"> Request Sent </span>
+                    <button class="input-group-addon addon-left manage-btn" title="Accept" v-show="user.status=='friend_to_approve'"
+                        v-on:click="acceptFriendRequest($event, user)">Accept Request</button>
+                    <button class="input-group-addon addon-left manage-btn" title="Add" v-show="user.status=='not_friend'"
                         v-on:click="sendFriendRequest($event, user)">Send Request</button>
                 </div>
             </div>
@@ -57,7 +35,6 @@
                 friend_requests: [],
                 friends: [],
                 users: [],
-                existIdsArr: [],
             }
         },
 
@@ -73,44 +50,50 @@
         methods: {
             sendFriendRequest(event, friend) {
                 if (event) event.preventDefault();
+                var users = this.users;
                 axios.post(uri+'/ask_friend', {friendId: friend.id}).then((response) => {
-                    this.fetchUser();
+                    friend.status = 'friend_request';
                 })
             },
             acceptFriendRequest(event, friend) {
                 if (event) event.preventDefault();
                 axios.post(uri+'/add_friend', {friendId: friend.id}).then((response) => {
-                    this.fetchUser();
+                    friend.status = 'friend';
                     bus.$emit('refreshPost')
                 })
             },
             fetchUser() {
-                this.existIdsArr = [];
-                axios.get(uri+'/friends').then((response) => {
-                    this.friends = response.data;
-                    this.friends.forEach(user => {this.existIdsArr.push(user.id)});
-                    
-                    axios.get(uri+'/friend_requests').then((response) => {
-                        this.friend_requests = response.data;
-                        this.friend_requests.forEach(user => {
-                            this.existIdsArr.push(user.id)
-                        })
-                        axios.get(uri+'/friend_to_approve').then((response) => {
-                            this.friend_to_approve = response.data;
-                            this.friend_to_approve.forEach(user => {
-                                this.existIdsArr.push(user.id)
-                            })
-                            axios.get(uri+'/all').then((response) => {
-                                this.users = response.data;
-                                this.users.forEach(user => {
-                                    if (this.existIdsArr.indexOf(user.id) > -1) {
-                                        user.hide = true;
-                                    }
-                                });
+                var promises = [];
+                promises.push(axios.get(uri+'/friends', {status:'friend'}))
+                promises.push(axios.get(uri+'/friend_requests', {status:'friend_request'}))
+                promises.push(axios.get(uri+'/friend_to_approve', {status:'friend_to_approve'}))
+
+                axios.all(promises)
+                    .then(axios.spread((...args) => {
+                        var users = [];
+                        var relatedUserIds = [];
+                        for (let i = 0; i < args.length; i++) {
+                            var status = args[i].config.status;
+                            args[i].data.forEach(user => {
+                                relatedUserIds.push(user.id)
+                                user.status = status
+                                users.push(user)
+                            });  
+                        }
+                        
+                        // will display the related users first
+                        this.users = users;
+                        // will load all the other users
+                        axios.get(uri+'/all').then(response => {
+                            response.data.forEach(user => {
+                                if (relatedUserIds.indexOf(user.id) == -1) {
+                                    //The user is not in a related array
+                                    user.status = "not_friend"
+                                    this.users.push(user)  
+                                }
                             });
-                        });
-                    });
-                })
+                        })
+                    }))
             },
 
             listenToEvents() {

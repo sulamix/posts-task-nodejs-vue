@@ -10242,6 +10242,7 @@ var uri = 'http://localhost:4000/api/post';
     addPost(event) {
       if (event) event.preventDefault();
 
+      // server will brodcast this message to all user friends
       socket.emit('add_post', this.post);
 
       __WEBPACK_IMPORTED_MODULE_0_axios___default.a.post(uri + '/add', this.post).then(response => {
@@ -10778,7 +10779,6 @@ const monthNames = ["January", "February", "March", "April", "May", "June", "Jul
             let uri = 'http://localhost:4000/api/post/all';
 
             __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri).then(response => {
-                console.log(response.data);
                 this.posts = response.data;
                 this.posts.forEach(post => {
                     post.date = this.formatDate(new Date(post.createdAt));
@@ -10789,6 +10789,11 @@ const monthNames = ["January", "February", "March", "April", "May", "June", "Jul
         listenToEvents() {
             __WEBPACK_IMPORTED_MODULE_1__bus_js__["a" /* default */].$on('refreshPost', $event => {
                 this.fetchPosts();
+            });
+
+            // update the user feeds with a new friend post
+            socket.on('add_feed', post => {
+                this.posts.unshift(post);
             });
         },
 
@@ -10834,27 +10839,6 @@ const monthNames = ["January", "February", "March", "April", "May", "June", "Jul
 //
 //
 //
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
 
 
 
@@ -10866,8 +10850,7 @@ var uri = 'http://localhost:4000/api/user';
             friend_to_approve: [],
             friend_requests: [],
             friends: [],
-            users: [],
-            existIdsArr: []
+            users: []
         };
     },
 
@@ -10883,46 +10866,49 @@ var uri = 'http://localhost:4000/api/user';
     methods: {
         sendFriendRequest(event, friend) {
             if (event) event.preventDefault();
+            var users = this.users;
             __WEBPACK_IMPORTED_MODULE_0_axios___default.a.post(uri + '/ask_friend', { friendId: friend.id }).then(response => {
-                this.fetchUser();
+                friend.status = 'friend_request';
             });
         },
         acceptFriendRequest(event, friend) {
             if (event) event.preventDefault();
             __WEBPACK_IMPORTED_MODULE_0_axios___default.a.post(uri + '/add_friend', { friendId: friend.id }).then(response => {
-                this.fetchUser();
+                friend.status = 'friend';
                 __WEBPACK_IMPORTED_MODULE_1__bus_js__["a" /* default */].$emit('refreshPost');
             });
         },
         fetchUser() {
-            this.existIdsArr = [];
-            __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friends').then(response => {
-                this.friends = response.data;
-                this.friends.forEach(user => {
-                    this.existIdsArr.push(user.id);
-                });
+            var promises = [];
+            promises.push(__WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friends', { status: 'friend' }));
+            promises.push(__WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friend_requests', { status: 'friend_request' }));
+            promises.push(__WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friend_to_approve', { status: 'friend_to_approve' }));
 
-                __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friend_requests').then(response => {
-                    this.friend_requests = response.data;
-                    this.friend_requests.forEach(user => {
-                        this.existIdsArr.push(user.id);
+            __WEBPACK_IMPORTED_MODULE_0_axios___default.a.all(promises).then(__WEBPACK_IMPORTED_MODULE_0_axios___default.a.spread((...args) => {
+                var users = [];
+                var relatedUserIds = [];
+                for (let i = 0; i < args.length; i++) {
+                    var status = args[i].config.status;
+                    args[i].data.forEach(user => {
+                        relatedUserIds.push(user.id);
+                        user.status = status;
+                        users.push(user);
                     });
-                    __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/friend_to_approve').then(response => {
-                        this.friend_to_approve = response.data;
-                        this.friend_to_approve.forEach(user => {
-                            this.existIdsArr.push(user.id);
-                        });
-                        __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/all').then(response => {
-                            this.users = response.data;
-                            this.users.forEach(user => {
-                                if (this.existIdsArr.indexOf(user.id) > -1) {
-                                    user.hide = true;
-                                }
-                            });
-                        });
+                }
+
+                // will display the related users first
+                this.users = users;
+                // will load all the other users
+                __WEBPACK_IMPORTED_MODULE_0_axios___default.a.get(uri + '/all').then(response => {
+                    response.data.forEach(user => {
+                        if (relatedUserIds.indexOf(user.id) == -1) {
+                            //The user is not in a related array
+                            user.status = "not_friend";
+                            this.users.push(user);
+                        }
                     });
                 });
-            });
+            }));
         },
 
         listenToEvents() {
@@ -10949,9 +10935,7 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 
 new __WEBPACK_IMPORTED_MODULE_0_vue___default.a({
   el: 'app',
-  created: function () {
-    console.log('created');
-  },
+  created: function () {},
   components: { App: __WEBPACK_IMPORTED_MODULE_1__components_App_vue__["a" /* default */] },
   methods: {}
 });
@@ -12440,100 +12424,6 @@ var render = function() {
             {
               name: "show",
               rawName: "v-show",
-              value: _vm.friend_to_approve.length > 0,
-              expression: "friend_to_approve.length>0"
-            }
-          ],
-          staticClass: "col-md-12"
-        },
-        _vm._l(_vm.friend_to_approve, function(user) {
-          return _c("div", { staticClass: "row mrb-10" }, [
-            _c("div", { staticClass: "user_container" }, [
-              _c("span", { staticClass: "user_name" }, [
-                _vm._v(" " + _vm._s(user.name) + " ")
-              ]),
-              _vm._v(" "),
-              _c(
-                "button",
-                {
-                  staticClass: "input-group-addon addon-left manage-btn",
-                  attrs: { title: "Accept" },
-                  on: {
-                    click: function($event) {
-                      _vm.acceptFriendRequest($event, user)
-                    }
-                  }
-                },
-                [_vm._v("Accept Request")]
-              )
-            ])
-          ])
-        })
-      ),
-      _vm._v(" "),
-      _c(
-        "div",
-        {
-          directives: [
-            {
-              name: "show",
-              rawName: "v-show",
-              value: _vm.friend_requests.length > 0,
-              expression: "friend_requests.length>0"
-            }
-          ],
-          staticClass: "col-md-12"
-        },
-        _vm._l(_vm.friend_requests, function(user) {
-          return _c("div", { staticClass: "row mrb-10" }, [
-            _c("hr"),
-            _vm._v(" "),
-            _c("div", { staticClass: "user_container" }, [
-              _c("span", { staticClass: "user_name" }, [
-                _vm._v(" " + _vm._s(user.name) + " ")
-              ]),
-              _vm._v(" "),
-              _c("span", { staticClass: "f-right" }, [_vm._v(" Request Sent ")])
-            ])
-          ])
-        })
-      ),
-      _vm._v(" "),
-      _c(
-        "div",
-        {
-          directives: [
-            {
-              name: "show",
-              rawName: "v-show",
-              value: _vm.friends.length > 0,
-              expression: "friends.length>0"
-            }
-          ],
-          staticClass: "col-md-12"
-        },
-        _vm._l(_vm.friends, function(user) {
-          return _c("div", { staticClass: "row mrb-10" }, [
-            _c("hr"),
-            _vm._v(" "),
-            _c("div", { staticClass: "user_container" }, [
-              _c("span", { staticClass: "user_name" }, [
-                _vm._v(" " + _vm._s(user.name) + " ")
-              ]),
-              _vm._v(" "),
-              _c("span", { staticClass: "f-right" }, [_vm._v(" A Friend ")])
-            ])
-          ])
-        })
-      ),
-      _vm._v(" "),
-      _c(
-        "div",
-        {
-          directives: [
-            {
-              name: "show",
-              rawName: "v-show",
               value: _vm.users.length > 0,
               expression: "users.length>0"
             }
@@ -12559,12 +12449,74 @@ var render = function() {
               _vm._v(" "),
               _c("div", { staticClass: "user_container" }, [
                 _c("span", { staticClass: "user_name" }, [
-                  _vm._v(" " + _vm._s(user.name) + " ")
+                  _vm._v(" " + _vm._s(user.name))
                 ]),
+                _vm._v(" "),
+                _c(
+                  "span",
+                  {
+                    directives: [
+                      {
+                        name: "show",
+                        rawName: "v-show",
+                        value: user.status == "friend",
+                        expression: "user.status=='friend'"
+                      }
+                    ],
+                    staticClass: "f-right"
+                  },
+                  [_vm._v(" A Friend ")]
+                ),
+                _vm._v(" "),
+                _c(
+                  "span",
+                  {
+                    directives: [
+                      {
+                        name: "show",
+                        rawName: "v-show",
+                        value: user.status == "friend_request",
+                        expression: "user.status=='friend_request'"
+                      }
+                    ],
+                    staticClass: "f-right"
+                  },
+                  [_vm._v(" Request Sent ")]
+                ),
                 _vm._v(" "),
                 _c(
                   "button",
                   {
+                    directives: [
+                      {
+                        name: "show",
+                        rawName: "v-show",
+                        value: user.status == "friend_to_approve",
+                        expression: "user.status=='friend_to_approve'"
+                      }
+                    ],
+                    staticClass: "input-group-addon addon-left manage-btn",
+                    attrs: { title: "Accept" },
+                    on: {
+                      click: function($event) {
+                        _vm.acceptFriendRequest($event, user)
+                      }
+                    }
+                  },
+                  [_vm._v("Accept Request")]
+                ),
+                _vm._v(" "),
+                _c(
+                  "button",
+                  {
+                    directives: [
+                      {
+                        name: "show",
+                        rawName: "v-show",
+                        value: user.status == "not_friend",
+                        expression: "user.status=='not_friend'"
+                      }
+                    ],
                     staticClass: "input-group-addon addon-left manage-btn",
                     attrs: { title: "Add" },
                     on: {

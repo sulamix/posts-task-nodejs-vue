@@ -50,8 +50,7 @@
             fetchPosts() {
                 let uri = 'http://localhost:4000/api/post/all';
 
-                axios.get(uri).then((response) => {
-                    console.log(response.data);
+                axios.get(uri).then(response => {
                     this.posts = response.data;
                     this.posts.forEach(post => {
                         post.date = this.formatDate(new Date(post.createdAt))
